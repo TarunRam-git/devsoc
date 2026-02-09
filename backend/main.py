@@ -218,7 +218,7 @@ async def full_analysis(
             shutil.copyfileobj(file.file, buf)
 
         report = await run_full_pipeline(
-            str(dst), groq_client, language,
+            str(dst), language,
             caller_id=caller_id,
             session_id=session_id
         )
@@ -229,87 +229,10 @@ async def full_analysis(
 
         return report
 
-    async def event_stream():
-        try:
-            start_time = datetime.now()
-
-            # ── Layer 1: Transcription + Audio Forensics ──────────────
-            yield _sse("progress", "layer1", "Layer 1: Transcribing audio with ElevenLabs Scribe & running audio forensics...")
-            layer1 = await asyncio.to_thread(run_layer1, str(dst), language)
-            transcript = layer1["transcript"]
-
-            if not transcript or not transcript.strip() or len(transcript.strip()) < 10:
-                yield _sse("error", "", "Transcription returned too short or empty — audio may be silent, corrupted, or in an unrecognized language. Try selecting the correct language.")
-                return
-
-            if not layer1.get("segments"):
-                yield _sse("error", "", "No usable speech segments found — audio may be too noisy or the language may be incorrect. Try selecting the correct language.")
-                return
-
-            seg_count = len(layer1.get("segments", []))
-            dur = round(layer1.get("duration", 0))
-            yield _sse("progress", "layer1_done", f"Layer 1 complete — {seg_count} segments, {dur}s audio transcribed")
-
-            # ── Layer 2: Text Analysis ────────────────────────────────
-            yield _sse("progress", "layer2", "Layer 2: Scanning for PII, profanity, obligations & financial entities...")
-            detected_lang = layer1.get("language", "en")
-            layer2 = await asyncio.to_thread(run_layer2, transcript, detected_lang)
-            pii_n = layer2.get("pii_count", 0)
-            prof_n = len(layer2.get("profanity_findings", []))
-            yield _sse("progress", "layer2_done", f"Layer 2 complete — {pii_n} PII items, {prof_n} profanity findings")
-
-            # ── Layer 3: AI Compliance ────────────────────────────────
-            yield _sse("progress", "layer3", "Layer 3: Running AI compliance analysis (Backboard.io + FinBERT)...")
-            layer3 = await run_layer3(transcript, layer2)
-            yield _sse("progress", "layer3_done", "Layer 3 complete — obligations, intent, compliance & terms analyzed")
-
-            # ── Assemble Report ───────────────────────────────────────
-            yield _sse("progress", "saving", "Computing risk score & saving report...")
-            elapsed = (datetime.now() - start_time).total_seconds()
-
-            report = {
-                "status": "success",
-                "processed_at": start_time.isoformat(),
-                "processing_time_seconds": round(elapsed, 2),
-                "audio_file": Path(str(dst)).name,
-                # Layer 1
-                "transcript": transcript,
-                "language": detected_lang,
-                "duration_seconds": layer1["duration"],
-                "segments": layer1["segments"],
-                "audio_quality": layer1["audio_quality"],
-                "overall_confidence": layer1.get("overall_confidence"),
-                "emotion_analysis": layer1.get("emotion_analysis"),
-                "tamper_detection": layer1.get("tamper_detection"),
-                # Layer 2
-                "pii_detected": layer2["pii_detected"],
-                "pii_count": layer2["pii_count"],
-                "financial_entities": layer2["financial_entities"],
-                "named_entities": layer2["named_entities"],
-                "profanity_findings": layer2["profanity_findings"],
-                "obligation_sentences": layer2["obligation_sentences"],
-                "text_risk_level": layer2["risk_level"],
-                # Layer 3
-                "finbert_analysis": layer3.get("finbert_analysis"),
-                "financial_term_explanations": layer3.get("term_explanations"),
-                "obligation_analysis": layer3["obligation_analysis"],
-                "intent_classification": layer3["intent_classification"],
-                "regulatory_compliance": layer3["regulatory_compliance"],
-                # Overall
-                "overall_risk": _compute_overall_risk(layer1, layer2, layer3),
-            }
-
-            report_path = await save_report(report)
-            report["report_path"] = report_path
-
-            yield f"data: {json.dumps({'type': 'complete', 'report': report}, default=str)}\n\n"
-
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Analysis failed: {str(e)}")
 
 
 # ── Get policy rules ──────────────────────────────────────────────────────

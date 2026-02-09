@@ -15,7 +15,6 @@ from layer3_backboard import run_layer3, initialize_assistants
 
 async def run_full_pipeline(
     audio_path: str, 
-    groq_client: Groq, 
     language: str | None = None,
     caller_id: str | None = None,
     session_id: str | None = None
@@ -25,13 +24,12 @@ async def run_full_pipeline(
 
     Args:
         audio_path: Path to audio file
-        groq_client: Groq client for transcription
         language: Optional language hint
         caller_id: Optional caller identifier for memory persistence
         session_id: Optional session ID for grouping related analyses
     
     Layers:
-        Layer 1: Audio Forensics  (Groq Whisper + Librosa)
+        Layer 1: Audio Forensics  (ElevenLabs Scribe + Librosa)
         Layer 2: Text Processing  (spaCy + Regex + PII)
         Layer 3: Intelligence     (Backboard assistants + Memory)
     """
