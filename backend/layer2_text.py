@@ -1,7 +1,7 @@
 """
 LAYER 2: Basic Text Processing (Local)
 - spaCy NER for financial entities (amounts, dates, orgs, persons)
-- PII detection (phone, email, SSN, card numbers via regex)
+- PII detection using Microsoft Presidio (ML + rules based) + Custom Recognizers
 - Profanity / prohibited phrase detection
 - Obligation keyword extraction
 """
@@ -10,11 +10,154 @@ import re
 import spacy
 from pathlib import Path
 
+# Microsoft Presidio for PII detection
+from presidio_analyzer import AnalyzerEngine, RecognizerRegistry, Pattern, PatternRecognizer
+from presidio_analyzer.nlp_engine import NlpEngineProvider
+
 # Load spaCy model
 nlp = spacy.load("en_core_web_sm")
 
 # ---------------------------------------------------------------------------
-# PII PATTERNS — Multilingual
+# CUSTOM RECOGNIZERS FOR SENSITIVE DATA
+# ---------------------------------------------------------------------------
+
+# 1. Remote Access Code Recognizer (AnyDesk, TeamViewer, etc.)
+#    Patterns: 1-1-0-9-1-8-5-8-5-9 or 1037498400 (9-10 digit codes)
+remote_access_patterns = [
+    Pattern(
+        name="remote_access_dashed",
+        regex=r"\b\d(?:[-.\s]\d){8,11}\b",  # 9-12 single digits with separators
+        score=0.9,
+    ),
+    Pattern(
+        name="remote_access_continuous", 
+        regex=r"\b\d{9,12}\b",  # 9-12 continuous digits
+        score=0.7,
+    ),
+]
+remote_access_recognizer = PatternRecognizer(
+    supported_entity="REMOTE_ACCESS_CODE",
+    patterns=remote_access_patterns,
+    name="RemoteAccessRecognizer",
+    supported_language="en",
+)
+
+# 2. Sensitive Numeric Sequence Recognizer
+#    Catches any sequence that looks like an ID, code, or account number
+sensitive_number_patterns = [
+    Pattern(
+        name="numeric_sequence_6_plus",
+        regex=r"\b\d{6,}\b",  # 6+ continuous digits
+        score=0.5,
+    ),
+    Pattern(
+        name="formatted_numeric_code",
+        regex=r"\b\d{2,4}[-.\s]\d{2,4}[-.\s]\d{2,4}(?:[-.\s]\d{2,4})?\b",  # xx-xx-xx or xxxx-xxxx-xxxx
+        score=0.6,
+    ),
+]
+sensitive_number_recognizer = PatternRecognizer(
+    supported_entity="SENSITIVE_NUMBER",
+    patterns=sensitive_number_patterns,
+    name="SensitiveNumberRecognizer", 
+    supported_language="en",
+)
+
+# 3. Extended Phone Recognizer (international formats)
+phone_patterns = [
+    Pattern(
+        name="phone_intl",
+        regex=r"\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}",
+        score=0.85,
+    ),
+    Pattern(
+        name="phone_spoken",
+        regex=r"\b(?:call|phone|mobile|cell|contact)(?:\s+(?:me|us|at))?\s*:?\s*\+?\d[\d\s.-]{8,15}\b",
+        score=0.9,
+    ),
+]
+phone_recognizer = PatternRecognizer(
+    supported_entity="PHONE_NUMBER_EXTENDED",
+    patterns=phone_patterns,
+    name="ExtendedPhoneRecognizer",
+    supported_language="en",
+)
+
+# 4. Aadhaar and Indian PAN Recognizer
+india_id_patterns = [
+    Pattern(
+        name="aadhaar",
+        regex=r"\b\d{4}[-.\s]?\d{4}[-.\s]?\d{4}\b",  # 12 digits in 4-4-4 format
+        score=0.85,
+    ),
+    Pattern(
+        name="pan_card",
+        regex=r"\b[A-Z]{5}\d{4}[A-Z]\b",  # Indian PAN format
+        score=0.95,
+    ),
+]
+india_id_recognizer = PatternRecognizer(
+    supported_entity="INDIA_ID",
+    patterns=india_id_patterns,
+    name="IndiaIDRecognizer",
+    supported_language="en",
+)
+
+# ---------------------------------------------------------------------------
+# PRESIDIO ANALYZER SETUP WITH CUSTOM RECOGNIZERS
+# ---------------------------------------------------------------------------
+# Create NLP engine configuration for Presidio
+configuration = {
+    "nlp_engine_name": "spacy",
+    "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+}
+
+# Create NLP engine provider
+provider = NlpEngineProvider(nlp_configuration=configuration)
+nlp_engine = provider.create_engine()
+
+# Create registry and add custom recognizers
+registry = RecognizerRegistry()
+registry.load_predefined_recognizers(nlp_engine=nlp_engine)
+registry.add_recognizer(remote_access_recognizer)
+registry.add_recognizer(sensitive_number_recognizer)
+registry.add_recognizer(phone_recognizer)
+registry.add_recognizer(india_id_recognizer)
+
+# Create analyzer with the NLP engine and custom registry
+analyzer = AnalyzerEngine(
+    nlp_engine=nlp_engine, 
+    supported_languages=["en"],
+    registry=registry,
+)
+
+# Entity types to detect with Presidio (built-in + custom)
+PRESIDIO_ENTITIES = [
+    # Built-in entities
+    "PERSON",           # Names
+    "EMAIL_ADDRESS",    # Emails
+    "PHONE_NUMBER",     # Phone numbers
+    "US_SSN",           # Social Security Numbers
+    "CREDIT_CARD",      # Credit card numbers
+    "US_BANK_NUMBER",   # Bank account numbers
+    "IP_ADDRESS",       # IP addresses
+    "DATE_TIME",        # Dates and times
+    "LOCATION",         # Addresses and locations
+    "US_DRIVER_LICENSE", # Driver's license
+    "US_PASSPORT",      # Passport numbers
+    "IBAN_CODE",        # International Bank Account Numbers
+    "NRP",              # Nationality, religious or political group
+    "MEDICAL_LICENSE",  # Medical license numbers
+    "URL",              # URLs
+    # Custom entities
+    "REMOTE_ACCESS_CODE",    # AnyDesk, TeamViewer codes
+    "SENSITIVE_NUMBER",      # Any suspicious numeric sequence
+    "PHONE_NUMBER_EXTENDED", # International phone formats
+    "INDIA_ID",              # Aadhaar, PAN
+]
+
+# ---------------------------------------------------------------------------
+# PII PATTERNS (Legacy Regex - kept for comparison)
 # ---------------------------------------------------------------------------
 PII_PATTERNS = {
     # English / International
@@ -126,8 +269,8 @@ OBLIGATION_KEYWORDS = [
 ]
 
 
-def detect_pii(text: str) -> list[dict]:
-    """Detect PII entities using regex patterns."""
+def detect_pii_regex(text: str) -> list[dict]:
+    """LEGACY: Detect PII entities using regex patterns (kept for comparison)."""
     findings = []
     for pii_type, pattern in PII_PATTERNS.items():
         for match in pattern.finditer(text):
@@ -137,7 +280,207 @@ def detect_pii(text: str) -> list[dict]:
                 "start": match.start(),
                 "end": match.end(),
                 "risk": "high",
+                "method": "regex",
             })
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# PII FILTERING AND CORRECTIONS
+# ---------------------------------------------------------------------------
+
+# Deny list: Common words/brands that are NOT PII
+# These get incorrectly flagged as PERSON or LOCATION
+DENY_LIST = {
+    # Applications & Software
+    "anydesk", "teamviewer", "zoom", "skype", "whatsapp", "telegram",
+    "chrome", "firefox", "safari", "edge", "opera",
+    "windows", "macos", "linux", "ubuntu",
+    # Phone/Device brands (not person names)
+    "pixel", "iphone", "samsung", "motorola", "oneplus", "xiaomi",
+    "huawei", "nokia", "sony", "lg", "oppo", "vivo", "realme",
+    "android", "ios",
+    # Tech/Financial terms
+    "google", "apple", "microsoft", "amazon", "facebook", "meta",
+    "paypal", "venmo", "cashapp", "cash app", "zelle",
+    "bitcoin", "ethereum", "crypto",
+    # Common false positives
+    "support", "help", "hello", "ok", "okay", "yes", "no",
+    "vpn", "qr", "wifi", "usb", "sim",
+}
+
+# Names that are commonly misclassified as LOCATION but are actually PERSON
+PERSON_NOT_LOCATION = {
+    "maryam", "stephen", "michael", "omar", "adam", "sarah", "john",
+    "david", "james", "robert", "william", "joseph", "charles",
+    "mary", "patricia", "jennifer", "linda", "elizabeth", "susan",
+    "ali", "ahmed", "mohammed", "fatima", "ayesha", "hassan",
+    "raj", "priya", "amit", "sunita", "vikram", "anita",
+}
+
+# Entity type corrections based on context keywords
+CONTEXT_CORRECTIONS = {
+    # If these words appear near the entity, reclassify
+    "speaking to": "PERSON",
+    "my name is": "PERSON", 
+    "name is": "PERSON",
+    "this is": "PERSON",
+    "manager is": "PERSON",
+    "colleague": "PERSON",
+    "daughter": "PERSON",
+    "son": "PERSON",
+    "mr.": "PERSON",
+    "mrs.": "PERSON",
+    "ms.": "PERSON",
+    "dr.": "PERSON",
+}
+
+
+def _should_filter_entity(value: str, entity_type: str) -> bool:
+    """Check if an entity should be filtered out (false positive)."""
+    value_lower = value.lower().strip()
+    
+    # Filter out deny-listed items
+    if value_lower in DENY_LIST:
+        return True
+    
+    # Filter very short values (likely false positives)
+    if len(value_lower) < 2:
+        return True
+    
+    # Filter single digits or simple numbers for PERSON/LOCATION
+    if entity_type in ("PERSON", "LOCATION") and value_lower.isdigit():
+        return True
+    
+    return False
+
+
+def _correct_entity_type(value: str, entity_type: str, text: str, start: int) -> str:
+    """Correct entity type based on the value and surrounding context."""
+    value_lower = value.lower().strip()
+    
+    # Fix LOCATION -> PERSON for known names
+    if entity_type == "LOCATION" and value_lower in PERSON_NOT_LOCATION:
+        return "PERSON"
+    
+    # Check surrounding context for type corrections
+    # Look at 50 characters before the entity
+    context_start = max(0, start - 50)
+    context = text[context_start:start].lower()
+    
+    for keyword, correct_type in CONTEXT_CORRECTIONS.items():
+        if keyword in context:
+            return correct_type
+    
+    return entity_type
+
+
+def _calculate_confidence(result, text: str) -> float:
+    """
+    Calculate a more nuanced confidence score based on multiple factors.
+    Presidio often returns 0.85 as a default, so we adjust based on context.
+    """
+    base_score = result.score
+    value = text[result.start:result.end].lower()
+    entity_type = result.entity_type
+    
+    # Boost confidence for exact pattern matches (custom recognizers)
+    if entity_type in ("REMOTE_ACCESS_CODE", "INDIA_ID", "CREDIT_CARD", "US_SSN"):
+        return min(0.95, base_score + 0.1)
+    
+    # Boost for longer, more specific values
+    if len(value) > 10:
+        base_score = min(0.95, base_score + 0.05)
+    
+    # Reduce confidence for very short values
+    if len(value) < 4:
+        base_score = max(0.4, base_score - 0.15)
+    
+    # Reduce confidence for common words that might be names
+    common_words = {"one", "two", "three", "four", "five", "the", "and", "for"}
+    if value in common_words:
+        base_score = max(0.3, base_score - 0.3)
+    
+    # Check if value appears multiple times with same classification (more confident)
+    # This is already handled by deduplication
+    
+    return round(base_score, 3)
+
+
+def detect_pii(text: str, score_threshold: float = 0.5) -> list[dict]:
+    """
+    Detect PII entities using Microsoft Presidio with post-processing.
+    
+    Improvements over basic Presidio:
+    - Filters out known non-PII (apps, brands, common words)
+    - Corrects misclassified entity types (LOCATION → PERSON for names)
+    - Context-aware type corrections
+    - Deduplication of overlapping entities
+    - Adjusted confidence scoring
+    
+    Args:
+        text: The text to analyze
+        score_threshold: Minimum confidence score (0.0 to 1.0)
+    
+    Returns:
+        List of detected PII entities with type, value, position, and confidence
+    """
+    findings = []
+    
+    try:
+        # Analyze text with Presidio
+        results = analyzer.analyze(
+            text=text,
+            entities=PRESIDIO_ENTITIES,
+            language="en",
+            score_threshold=score_threshold,
+        )
+        
+        # Post-process results
+        seen_positions = set()  # For deduplication
+        
+        for result in results:
+            value = text[result.start:result.end]
+            entity_type = result.entity_type
+            
+            # Skip if this position was already processed (overlapping entities)
+            pos_key = (result.start, result.end)
+            if pos_key in seen_positions:
+                continue
+            seen_positions.add(pos_key)
+            
+            # Filter out false positives
+            if _should_filter_entity(value, entity_type):
+                continue
+            
+            # Correct entity type if needed
+            corrected_type = _correct_entity_type(value, entity_type, text, result.start)
+            
+            # Calculate adjusted confidence
+            confidence = _calculate_confidence(result, text)
+            
+            # Skip if below threshold after adjustment
+            if confidence < score_threshold:
+                continue
+            
+            findings.append({
+                "type": corrected_type,
+                "value": value,
+                "start": result.start,
+                "end": result.end,
+                "confidence": confidence,
+                "risk": "high" if confidence >= 0.8 else "medium" if confidence >= 0.5 else "low",
+                "method": "presidio",
+            })
+            
+    except Exception as e:
+        # Fallback to regex if Presidio fails
+        print(f"Presidio error, falling back to regex: {e}")
+        return detect_pii_regex(text)
+    
+    # Sort by position
+    findings.sort(key=lambda x: x["start"])
+    
     return findings
 
 
