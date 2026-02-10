@@ -156,11 +156,14 @@ def _compute_overall_risk(layer1: dict, layer2: dict, layer3: dict) -> dict:
 
         comp_score = compliance.get("compliance_score")
         if isinstance(comp_score, (int, float)):
-            score = int(score * 0.4 + comp_score * 0.6)
+            # Invert compliance score to ensure higher = more compliant, lower = less compliant
+            # The AI assistant may return scores where higher values indicate more violations
+            compliance_score = 100 - comp_score
+            score = int(score * 0.4 + compliance_score * 0.6)
 
     score = max(score, 0)
 
-    if score >= 80:
+    if score >= 75:
         level = "low"
     elif score >= 50:
         level = "medium"

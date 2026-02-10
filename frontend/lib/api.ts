@@ -155,6 +155,32 @@ function extractViolations(report: any): ViolationDetail[] {
         });
     }
 
+    // From data handling issues
+    if (report.regulatory_compliance?.data_handling_issues && Array.isArray(report.regulatory_compliance.data_handling_issues)) {
+        report.regulatory_compliance.data_handling_issues.forEach((issue: string) => {
+            if (issue) {
+                addViolation({
+                    type: "Data Handling Issue",
+                    severity: "high",
+                    description: issue,
+                });
+            }
+        });
+    }
+
+    // From prohibited behavior
+    if (report.regulatory_compliance?.prohibited_behavior && Array.isArray(report.regulatory_compliance.prohibited_behavior)) {
+        report.regulatory_compliance.prohibited_behavior.forEach((behavior: string) => {
+            if (behavior) {
+                addViolation({
+                    type: "Prohibited Behavior",
+                    severity: "high",
+                    description: behavior,
+                });
+            }
+        });
+    }
+
     return violations;
 }
 
