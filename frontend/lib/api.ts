@@ -411,3 +411,127 @@ export async function fetchCallerHistory(callerId: string): Promise<Report[]> {
         return [];
     }
 }
+
+
+// ── Analytics API ─────────────────────────────────────────────────────────
+
+export interface AnalyticsSummary {
+    report_count: number;
+    can_export_csv: boolean;
+    min_batch_size: number;
+    avg_compliance_score: number;
+    min_compliance_score: number;
+    max_compliance_score: number;
+    avg_risk_score: number;
+    min_risk_score: number;
+    max_risk_score: number;
+    total_duration_seconds: number;
+    avg_duration_seconds: number;
+    intent_distribution: Record<string, number>;
+    compliance_distribution: Record<string, number>;
+    risk_level_distribution: Record<string, number>;
+    outcome_distribution: Record<string, number>;
+    total_violations: number;
+    total_pii_detected: number;
+    total_obligations: number;
+}
+
+export interface TrendDataPoint {
+    timestamp: string;
+    audio_file: string;
+    compliance_score: number;
+    risk_score: number;
+    violation_count: number;
+    duration_seconds: number;
+}
+
+export interface AnalyticsTrends {
+    report_count: number;
+    data_points: TrendDataPoint[];
+    can_export_csv: boolean;
+}
+
+/**
+ * Fetch analytics summary from Layer 5
+ */
+export async function fetchAnalyticsSummary(): Promise<AnalyticsSummary | null> {
+    try {
+        const res = await fetch(`${API_BASE}/analytics/summary`);
+        if (!res.ok) throw new Error(`Failed to fetch analytics: ${res.status}`);
+        return await res.json();
+    } catch (error) {
+        console.error("Error fetching analytics summary:", error);
+        return null;
+    }
+}
+
+/**
+ * Fetch analytics trends from Layer 5
+ */
+export async function fetchAnalyticsTrends(): Promise<AnalyticsTrends | null> {
+    try {
+        const res = await fetch(`${API_BASE}/analytics/trends`);
+        if (!res.ok) throw new Error(`Failed to fetch trends: ${res.status}`);
+        return await res.json();
+    } catch (error) {
+        console.error("Error fetching analytics trends:", error);
+        return null;
+    }
+}
+
+
+// ── Layer 6: Query Bot API ───────────────────────────────────────────────
+
+export interface QueryResponse {
+    status: string;
+    answer: string;
+    data_context: {
+        total_calls: number;
+        data_source: string;
+    };
+    session_id: string | null;
+}
+
+export interface QuerySuggestion {
+    text: string;
+    category: string;
+}
+
+/**
+ * Send a natural language query to Layer 6 Query Bot
+ */
+export async function sendQuery(question: string, sessionId?: string): Promise<QueryResponse | null> {
+    try {
+        const res = await fetch(`${API_BASE}/query`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                question,
+                session_id: sessionId || null,
+            }),
+        });
+        if (!res.ok) {
+            const errBody = await res.text();
+            throw new Error(`Query failed (${res.status}): ${errBody}`);
+        }
+        return await res.json();
+    } catch (error) {
+        console.error("Error sending query:", error);
+        throw error;
+    }
+}
+
+/**
+ * Fetch suggested questions for the query bot
+ */
+export async function fetchQuerySuggestions(): Promise<QuerySuggestion[]> {
+    try {
+        const res = await fetch(`${API_BASE}/query/suggestions`);
+        if (!res.ok) throw new Error(`Failed to fetch suggestions: ${res.status}`);
+        const data = await res.json();
+        return data.suggestions || [];
+    } catch (error) {
+        console.error("Error fetching query suggestions:", error);
+        return [];
+    }
+}
