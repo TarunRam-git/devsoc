@@ -32,19 +32,17 @@ export default function ReportsPage() {
             new Date(a.timestamp || new Date().toISOString()).getTime()
     );
 
-    const highRiskCount = reports.filter((r) => (r.risk_score || 0) >= 7).length;
-    const mediumRiskCount = reports.filter(
-        (r) => (r.risk_score || 0) >= 4 && (r.risk_score || 0) < 7
-    ).length;
-    const lowRiskCount = reports.filter((r) => (r.risk_score || 0) < 4).length;
+    const highRiskCount = reports.filter((r) => r.risk_level === "high").length;
+    const mediumRiskCount = reports.filter((r) => r.risk_level === "medium").length;
+    const lowRiskCount = reports.filter((r) => r.risk_level === "low").length;
 
     return (
         <div className="min-h-screen bg-gray-950 text-gray-100">
-            <div className="max-w-6xl mx-auto px-4 py-12">
+            <div className="max-w-7xl mx-auto px-6 py-8">
                 {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-4xl font-bold mb-2">Call Reports</h1>
-                    <p className="text-gray-400">
+                <div className="mb-6">
+                    <h1 className="text-3xl font-bold mb-1">Call Reports</h1>
+                    <p className="text-gray-400 text-sm">
                         Review and analyze financial service call recordings
                     </p>
                 </div>
@@ -52,28 +50,21 @@ export default function ReportsPage() {
                 {/* Stats */}
                 {reports.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-                        <div className="bg-gray-900 rounded-lg border border-gray-700 p-4">
-                            <p className="text-sm text-gray-400">Total Calls</p>
-                            <p className="text-2xl font-bold">{reports.length}</p>
+                        <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                            <p className="text-xs font-medium text-gray-500 tracking-wider">TOTAL CALLS</p>
+                            <p className="text-2xl font-bold mt-1">{reports.length}</p>
                         </div>
-                        <div className="bg-gray-900 rounded-lg border border-gray-700 p-4">
-                            <p className="text-sm text-gray-400">Avg Risk Score</p>
-                            <p className="text-2xl font-bold">
-                                {(
-                                    reports.reduce((sum, r) => sum + (r.risk_score || 0), 0) /
-                                    reports.length
-                                ).toFixed(1)}
-                            </p>
+                        <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                            <p className="text-xs font-medium text-gray-500 tracking-wider">LOW RISK</p>
+                            <p className="text-2xl font-bold mt-1 text-emerald-400">{lowRiskCount}</p>
                         </div>
-                        <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-                            <p className="text-sm text-red-200">High Risk</p>
-                            <p className="text-2xl font-bold text-red-100">{highRiskCount}</p>
+                        <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                            <p className="text-xs font-medium text-gray-500 tracking-wider">MEDIUM RISK</p>
+                            <p className="text-2xl font-bold mt-1 text-amber-400">{mediumRiskCount}</p>
                         </div>
-                        <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-4">
-                            <p className="text-sm text-yellow-200">Medium Risk</p>
-                            <p className="text-2xl font-bold text-yellow-100">
-                                {mediumRiskCount}
-                            </p>
+                        <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                            <p className="text-xs font-medium text-gray-500 tracking-wider">HIGH RISK</p>
+                            <p className="text-2xl font-bold mt-1 text-rose-400">{highRiskCount}</p>
                         </div>
                     </div>
                 )}
@@ -81,27 +72,27 @@ export default function ReportsPage() {
                 {/* Loading state */}
                 {loading && (
                     <div className="text-center py-12">
-                        <p className="text-gray-400">Loading reports...</p>
+                        <p className="text-gray-400 animate-pulse">Loading reports...</p>
                     </div>
                 )}
 
                 {/* Error state */}
                 {error && (
-                    <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 mb-6">
-                        <p className="text-red-200">{error}</p>
+                    <div className="bg-red-900/20 border border-red-700 rounded-xl p-4 mb-6">
+                        <p className="text-red-200 text-sm">{error}</p>
                     </div>
                 )}
 
                 {/* Empty state */}
                 {!loading && reports.length === 0 && (
-                    <div className="text-center py-12 bg-gray-900 rounded-lg border border-gray-700">
-                        <p className="text-gray-400">No reports yet. Upload an audio file to get started.</p>
+                    <div className="text-center py-16 bg-gray-900 rounded-xl border border-gray-800">
+                        <p className="text-gray-500">No reports yet. Upload an audio file to get started.</p>
                     </div>
                 )}
 
                 {/* Reports grid */}
                 {!loading && reports.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {sortedReports.map((report, idx) => (
                             <ReportCard
                                 key={report.id || `report-${idx}`}

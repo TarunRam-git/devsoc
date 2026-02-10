@@ -380,6 +380,29 @@ FINANCIAL_PATTERNS_RU = {
         r"|(?:\d[\d\s,]*(?:[.,]\d{1,2})?\s*(?:долларов|евро))",
         re.IGNORECASE,
     ),
+    # Spelled-out Russian numbers + currency: "двадцать пять тысяч долларов"
+    "currency_ru_words": re.compile(
+        r"(?:(?:один|два|три|четыре|пять|шесть|семь|восемь|девять|десять"
+        r"|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать"
+        r"|шестнадцать|семнадцать|восемнадцать|девятнадцать"
+        r"|двадцать|тридцать|сорок|пятьдесят|шестьдесят|семьдесят|восемьдесят|девяносто|сто)"
+        r"(?:\s+(?:один|два|три|четыре|пять|шесть|семь|восемь|девять|десять"
+        r"|одиннадцать|двенадцать|тринадцать|четырнадцать|пятнадцать"
+        r"|шестнадцать|семнадцать|восемнадцать|девятнадцать"
+        r"|двадцать|тридцать|сорок|пятьдесят|шестьдесят|семьдесят|восемьдесят|девяносто|сто))*"
+        r"\s+(?:тысяч(?:а|и)?|миллион(?:ов|а)?|млн)"
+        r"(?:\s+(?:рублей|долларов|евро))?)",
+        re.IGNORECASE,
+    ),
+    # Russian trading/financial terms
+    "financial_term_ru": re.compile(
+        r"(?:маржин\s*колл|margin\s*call|просадк[аиеу]|спред(?:ы|ов)?|"
+        r"позици[яюией]|лот(?:ов|а|ы)?|депозит(?:а|ы|ов)?|"
+        r"капитал(?:а|ом)?|брокер(?:ом|а|у)?|торгов(?:ый|ой|ых)\s+аккаунт|"
+        r"банковск(?:ая|ий|ой|ую)\s+инвестици[яюией]|"
+        r"в\s+(?:минус|плюс|ноль|убыто?к|прибыль))",
+        re.IGNORECASE,
+    ),
     "percentage_ru": re.compile(
         r"\b\d+(?:[.,]\d+)?\s*(?:%|процент(?:ов|а)?)\b", re.IGNORECASE
     ),
@@ -390,6 +413,31 @@ FINANCIAL_PATTERNS_RU = {
     ),
     "loan_term_ru": re.compile(
         r"\b\d+\s*(?:месяц(?:ев|а)?|лет|год(?:а|ов)?|дней|дня)\b",
+        re.IGNORECASE,
+    ),
+}
+
+# Tamil financial patterns (Tamilized English loan words + Tamil terms)
+FINANCIAL_PATTERNS_TA = {
+    "financial_term_ta": re.compile(
+        r"(?:அக்கவுண்ட்|அக்கவுண்ட|லோன்|லோன|"
+        r"பேமென்ட்|பேமெண்ட்|பேமென்ட|"
+        r"சார்ஜ்|சார்ஜஸ்|சார்ஜ|"
+        r"கலெக்ஷன்|கலெக்ஷன|"
+        r"பவுன்ஸ்|பவுண்ட்ஸ்|பவுண்ஸ்|"
+        r"இஎம்ஐ|EMI|"
+        r"கிரெடிட்|டெபிட்|"
+        r"பைன்|ஃபைன்|"
+        r"இன்ட்ரெஸ்ட்|"
+        r"பேலன்ஸ்|பேலன்ஸ|"
+        r"ரூபாய்|ரூபா)",
+        re.IGNORECASE,
+    ),
+    "date_ta": re.compile(
+        # Tamil ordinal dates: "அஞ்சாம் தேதி" (5th date), etc.
+        r"(?:(?:ஒன்றாம்|இரண்டாம்|மூன்றாம்|நான்காம்|அஞ்சாம்|ஆறாம்|"
+        r"ஏழாம்|எட்டாம்|ஒன்பதாம்|பத்தாம்|பதினைந்தாம்|இருபதாம்|"
+        r"இருபத்தைந்தாம்|முப்பதாம்)\s+தேதி)",
         re.IGNORECASE,
     ),
 }
@@ -460,12 +508,11 @@ PROHIBITED_PHRASES_RU = [
 # OBLIGATION KEYWORDS (multilingual — expanded Hindi)
 # ---------------------------------------------------------------------------
 OBLIGATION_KEYWORDS_EN = [
-    "must", "shall", "required", "mandatory", "obligated",
-    "need to", "have to", "should", "will be charged",
-    "agree to", "consent", "acknowledge", "confirm",
-    "i promise", "we guarantee", "committed to",
+    "must", "shall", "mandatory", "obligated",
+    "will be charged",
+    "agree to", "i promise", "we guarantee", "committed to",
     "by signing", "terms and conditions", "cooling off",
-    "within 30 days", "penalty", "fee", "interest rate",
+    "within 30 days", "penalty", "interest rate",
     "liable", "binding", "enforceable", "forfeit", "waive",
 ]
 
@@ -488,7 +535,26 @@ OBLIGATION_KEYWORDS_RU = [
     "должен", "обязан", "необходимо", "обещаю", "гарантирую",
     "подтверждаю", "согласен", "обязательно", "штраф", "комиссия",
     "процент", "условия", "договор", "контракт",
-    "в течение", "обязуюсь", "ответственность",
+    "обязуюсь", "ответственность",
+    # Trading-specific obligations
+    "маржин", "депозит",
+]
+
+OBLIGATION_KEYWORDS_TA = [
+    # Tamilized English financial terms
+    "அக்கவுண்ட்", "அக்கவுண்ட", "லோன்", "லோன",
+    "பேமென்ட்", "பேமெண்ட்", "EMI", "இஎம்ஐ",
+    "சார்ஜ்", "சார்ஜஸ்", "சார்ஜ",
+    "கலெக்ஷன்", "கலெக்ஷன",
+    "பவுன்ஸ்", "பவுண்ட்ஸ்", "பவுண்ஸ்",
+    "இன்ட்ரெஸ்ட்", "பேலன்ஸ்",
+    # Tamil obligation-like words
+    "எடுத்துருவாங்க", "வருவாங்க", "கட்டிக்கிற",
+    "வாங்குறது", "கட்ட", "கட்டணம்",
+    "தேதி", "மாசம்",
+    # English words that may appear in Tamil sentences
+    "payment", "collection", "loan", "EMI", "charge",
+    "account", "balance", "interest", "penalty", "fee",
 ]
 
 
@@ -597,6 +663,27 @@ def _should_filter_entity(value: str, entity_type: str) -> bool:
     }
     if entity_type in ("PERSON", "LOCATION", "NRP") and value_lower in common_words:
         return True
+
+    # Filter false DATE_TIME: casual time references like "five", "one second",
+    # "five, ten minutes" are NOT PII
+    if entity_type == "DATE_TIME":
+        casual_time_words = {
+            "one", "two", "three", "four", "five", "six", "seven", "eight",
+            "nine", "ten", "fifteen", "twenty", "thirty", "forty", "fifty",
+            "a moment", "a second", "a minute", "a bit",
+            "one second", "one moment", "one minute",
+            "just a second", "just a moment", "just a minute",
+        }
+        if value_lower in casual_time_words:
+            return True
+        # "five, ten minutes" or "two, three minutes" pattern
+        if re.match(r'^(?:one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty)'
+                    r'(?:,?\s*(?:one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty))*'
+                    r'\s*(?:seconds?|minutes?|hours?)$', value_lower):
+            return True
+        # Bare numbers without date context
+        if re.match(r'^\d{1,2}$', value_lower):
+            return True
 
     return False
 
@@ -797,7 +884,12 @@ def extract_financial_entities(text: str, language: str = "en") -> list[dict]:
         pattern_sets = {**FINANCIAL_PATTERNS_HI, **FINANCIAL_PATTERNS_EN}
     elif lang == "ru":
         pattern_sets = {**FINANCIAL_PATTERNS_RU, **FINANCIAL_PATTERNS_EN}
+    elif lang == "ta":
+        pattern_sets = {**FINANCIAL_PATTERNS_TA, **FINANCIAL_PATTERNS_EN}
+    elif lang == "en":
+        pattern_sets = FINANCIAL_PATTERNS_EN
     else:
+        # For any other language, still try English patterns (mixed-language calls)
         pattern_sets = FINANCIAL_PATTERNS_EN
 
     seen_spans = set()
@@ -913,7 +1005,11 @@ def _split_sentences_universal(text: str, language: str = "en") -> list[str]:
 
 
 def extract_obligations(text: str, language: str = "en") -> list[dict]:
-    """Extract sentences containing obligation keywords (language-aware)."""
+    """Extract sentences containing obligation keywords (language-aware).
+    
+    Applies minimum sentence length and requires financial/legal context
+    to reduce false positives from conversational speech.
+    """
     lang = _normalize_language(language, text)
     obligations = []
 
@@ -921,19 +1017,38 @@ def extract_obligations(text: str, language: str = "en") -> list[dict]:
         keywords = OBLIGATION_KEYWORDS_HI + OBLIGATION_KEYWORDS_EN
     elif lang == "ru":
         keywords = OBLIGATION_KEYWORDS_RU + OBLIGATION_KEYWORDS_EN
+    elif lang == "ta":
+        keywords = OBLIGATION_KEYWORDS_TA + OBLIGATION_KEYWORDS_EN
+    elif lang == "en":
+        keywords = OBLIGATION_KEYWORDS_EN
     else:
+        # For other languages, at least try English keywords (mixed-language calls)
         keywords = OBLIGATION_KEYWORDS_EN
 
     sentences = _split_sentences_universal(text, lang)
 
+    # Minimum sentence length to filter out trivial matches
+    MIN_SENTENCE_LEN = 25
+
     for sent in sentences:
+        # Skip very short sentences
+        if len(sent.strip()) < MIN_SENTENCE_LEN:
+            continue
+
         sent_lower = sent.lower()
         matched_keywords = []
         for kw in keywords:
             kw_lower = kw.lower()
-            pattern = r'(?<!\w)' + re.escape(kw_lower) + r'(?!\w)'
-            if re.search(pattern, sent_lower):
-                matched_keywords.append(kw)
+            # For non-Latin scripts (Tamil, Devanagari, Cyrillic, etc.),
+            # use simple substring match since \w word boundaries don't 
+            # work reliably with these scripts.
+            if lang not in ("en",):
+                if kw_lower in sent_lower:
+                    matched_keywords.append(kw)
+            else:
+                pattern = r'(?<!\w)' + re.escape(kw_lower) + r'(?!\w)'
+                if re.search(pattern, sent_lower):
+                    matched_keywords.append(kw)
 
         if matched_keywords:
             idx = text.find(sent)

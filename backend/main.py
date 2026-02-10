@@ -293,6 +293,22 @@ async def full_analysis(
             report_path = await save_report(report)
             report["report_path"] = report_path
 
+            # ── Store in Memory Layer ──
+            if caller_id:
+                try:
+                    mem = await get_memory_manager()
+                    await mem.store_call_summary(caller_id, {
+                        "intent": report.get("intent_classification", {}).get("primary_intent", "unknown"),
+                        "risk_level": report.get("overall_risk", {}).get("level", "unknown"),
+                        "compliance_score": report.get("regulatory_compliance", {}).get("compliance_score"),
+                        "sentiment": report.get("intent_classification", {}).get("customer_sentiment", ""),
+                        "violations_count": len(report.get("regulatory_compliance", {}).get("violations", [])),
+                        "audio_file": report.get("audio_file", ""),
+                        "language": report.get("language", ""),
+                    })
+                except Exception as mem_err:
+                    print(f"⚠ Memory storage failed: {mem_err}")
+
             yield f"data: {json.dumps({'type': 'complete', 'report': report}, default=str, ensure_ascii=False)}\n\n"
 
         except Exception as e:
@@ -611,6 +627,38 @@ async def query_suggestions():
     return {
         "suggestions": get_suggested_questions(),
     }
+
+
+@app.post("/query/with-csv")
+async def query_with_csv(body: dict):
+    """
+    Layer 6: Query bot that auto-loads the latest CSV export as context.
+    The chatbot will automatically use CSV data when available.
+
+    Input: {"question": "...", "session_id": "optional"}
+    """
+    question = body.get("question", "").strip()
+    if not question:
+        raise HTTPException(400, "No question provided")
+
+    session_id = body.get("session_id")
+
+    try:
+        # Try to generate/refresh CSV first so the query bot has the latest data
+        csv_path, csv_err = export_all_reports_csv()
+        if csv_err:
+            print(f"CSV not available for query bot: {csv_err}")
+
+        result = await handle_query(question, session_id=session_id)
+        return {
+            "status": "success",
+            "csv_loaded": csv_path is not None,
+            **result,
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Query failed: {str(e)}")
 
 
 # ── Run ────────────────────────────────────────────────────────────────────

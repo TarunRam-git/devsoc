@@ -1,12 +1,21 @@
 const API_BASE = "http://127.0.0.1:8000";
 
+export interface ViolationDetail {
+    type: string;
+    severity: "high" | "medium" | "low";
+    description: string;
+    quote?: string;
+    action_required?: string;
+}
+
 export interface Report {
     id: string;
     filename: string;
     timestamp: string;
     risk_score: number;
+    risk_level?: "high" | "medium" | "low";
     transcript?: string;
-    violations?: string[];
+    violations?: ViolationDetail[];
     obligations?: string[];
     stress_timeline?: { time: string; stress: number }[];
     agent_segments?: { speaker: string; time: string; text: string; risk_keywords?: string[] }[];
@@ -49,9 +58,16 @@ export async function fetchReports(): Promise<Report[]> {
  */
 function mapBackendReport(backendReport: any): Report {
     const overallRisk = backendReport.overall_risk || {};
-    // Backend score is 0-100, convert to 0-10 scale for frontend display
-    const backendScore = typeof overallRisk.score === "number" ? overallRisk.score : (backendReport.risk_score || 0);
-    const riskScore = Math.min(backendScore / 10, 10);  // Convert 0-100 to 0-10
+    // Backend score is a SAFETY score (higher = safer). Invert to risk score for display.
+    // Backend score is a SAFETY score (higher = safer). Convert to RISK score (higher = riskier).
+    const backendScore = typeof overallRisk.score === "number" ? overallRisk.score : (backendReport.risk_score || 50);
+    const riskScore = Math.max(0, Math.min(100, 100 - backendScore));  // Invert: 100 safety → 0 risk, 0 safety → 100 risk
+
+    // Use backend's risk level directly when available
+    const riskLevel = (overallRisk.level || "").toLowerCase() as "high" | "medium" | "low" | "";
+    const resolvedRiskLevel: "high" | "medium" | "low" = riskLevel === "high" || riskLevel === "medium" || riskLevel === "low"
+        ? riskLevel
+        : riskScore >= 65 ? "high" : riskScore >= 35 ? "medium" : "low";
 
     const violations = extractViolations(backendReport);
     const obligations = extractObligations(backendReport);
@@ -74,6 +90,7 @@ function mapBackendReport(backendReport: any): Report {
         filename: backendReport.audio_file || backendReport.filename || "Unknown Call",
         timestamp: backendReport.processed_at || backendReport.timestamp || new Date().toISOString(),
         risk_score: riskScore,
+        risk_level: resolvedRiskLevel,
         transcript: backendReport.transcript,
         violations,
         obligations,
@@ -84,16 +101,30 @@ function mapBackendReport(backendReport: any): Report {
 }
 
 /**
- * Extract violations from backend report
+ * Extract violations from backend report as structured objects
  */
-function extractViolations(report: any): string[] {
-    const violations: Set<string> = new Set();
+function extractViolations(report: any): ViolationDetail[] {
+    const seen = new Set<string>();
+    const violations: ViolationDetail[] = [];
+
+    const addViolation = (v: ViolationDetail) => {
+        const key = `${v.type}::${v.description}`;
+        if (!seen.has(key)) {
+            seen.add(key);
+            violations.push(v);
+        }
+    };
 
     // From profanity findings
     if (report.profanity_findings && Array.isArray(report.profanity_findings)) {
         report.profanity_findings.forEach((p: any) => {
             if (p.phrase) {
-                violations.add(`Prohibited phrase: "${p.phrase}"`);
+                addViolation({
+                    type: "Prohibited Phrase",
+                    severity: "high",
+                    description: `Use of prohibited language detected`,
+                    quote: p.phrase,
+                });
             }
         });
     }
@@ -101,20 +132,30 @@ function extractViolations(report: any): string[] {
     // From regulatory compliance
     if (report.regulatory_compliance?.violations && Array.isArray(report.regulatory_compliance.violations)) {
         report.regulatory_compliance.violations.forEach((v: any) => {
-            if (v.description) {
-                violations.add(v.description);
-            }
+            addViolation({
+                type: v.regulation || "Regulatory Violation",
+                severity: v.severity === "critical" ? "high" : v.severity === "major" ? "medium" : "low",
+                description: v.action_required || v.description || "Compliance violation detected",
+                quote: v.quote,
+                action_required: v.action_required,
+            });
         });
     }
 
     // From risk factors
     if (report.overall_risk?.risk_factors && Array.isArray(report.overall_risk.risk_factors)) {
         report.overall_risk.risk_factors.forEach((factor: string) => {
-            if (factor) violations.add(factor);
+            if (factor) {
+                addViolation({
+                    type: "Risk Factor",
+                    severity: factor.toLowerCase().includes("critical") || factor.toLowerCase().includes("pii") ? "high" : "medium",
+                    description: factor,
+                });
+            }
         });
     }
 
-    return Array.from(violations);
+    return violations;
 }
 
 /**
@@ -533,5 +574,35 @@ export async function fetchQuerySuggestions(): Promise<QuerySuggestion[]> {
     } catch (error) {
         console.error("Error fetching query suggestions:", error);
         return [];
+    }
+}
+
+
+// ── Layer 5: CSV Export ──────────────────────────────────────────────────
+
+/**
+ * Download all reports as CSV from Layer 5.
+ * Triggers a file download in the browser.
+ */
+export async function exportCSV(): Promise<{ success: boolean; error?: string }> {
+    try {
+        const res = await fetch(`${API_BASE}/export/csv`);
+        if (!res.ok) {
+            const errBody = await res.json().catch(() => ({ detail: "Export failed" }));
+            return { success: false, error: errBody.detail || `Export failed (${res.status})` };
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `call_analytics_export_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        return { success: true };
+    } catch (error) {
+        console.error("Error exporting CSV:", error);
+        return { success: false, error: "Failed to connect to backend" };
     }
 }

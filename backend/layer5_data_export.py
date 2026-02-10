@@ -20,7 +20,7 @@ from collections import Counter
 import uuid
 
 # Minimum files required to generate CSV
-MIN_BATCH_SIZE = 6
+MIN_BATCH_SIZE = 1
 
 # Output directories
 DATA_DIR = Path(__file__).parent.parent / "data"
